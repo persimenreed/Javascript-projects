@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="no" style="display: table; margin: auto;">
+<head>
+    <meta charset="UTF-8" content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Task 5.3</title>
+    <style>
+        body {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
+        }
+    </style>
+    <script src="MinesweeperGameBoard.js"></script>
+    <script src="Sprite/Sprite.js"></script>
+</head>
+<body>
+<h2><label for="cvs">Mine Sweeper</label></h2>
+<canvas id="cvs" height="100px" width="100px" style="background-color: antiquewhite"></canvas>
+<h3><label for="selectDifficulty">Select Difficulty:</label>
+    <select id="selectDifficulty"></select></h3>
+<h4>Press F12 to debug (Chrome and Firefox)</h4>
+<script>
+    "use strict";
+    //--------------------------------------------------------------------------------------------------------------------
+    //------ Variables, Constants and Objects
+    //--------------------------------------------------------------------------------------------------------------------
+    const MineSweeperSheet = {
+        Board: {
+            TopLeft: {x: 0, y: 0, w: 163, h: 133, count: 1, speed: 0, alpha: 1},
+            TopMiddle: {x: 163, y: 0, w: 134, h: 133, count: 1, speed: 0, alpha: 1},
+            TopRight: {x: 297, y: 0, w: 163, h: 133, count: 1, speed: 0, alpha: 1},
+            LeftMiddle: {x: 0, y: 133, w: 21, h: 243, count: 1, speed: 0, alpha: 1},
+            RightMiddle: {x: 439, y: 133, w: 21, h: 243, count: 1, speed: 0, alpha: 1},
+            BottomLeft: {x: 0, y: 377, w: 21, h: 21, count: 1, speed: 0, alpha: 1},
+            BottomMiddle: {x: 21, y: 377, w: 417, h: 21, count: 1, speed: 0, alpha: 1},
+            BottomRight: {x: 439, y: 377, w: 21, h: 21, count: 1, speed: 0, alpha: 1},
+        },
+        ButtonNormal: {x: 0, y: 482, w: 50, h: 50, count: 6, speed: 0, alpha: 1},
+        ButtonSmiley: {x: 0, y: 532, w: 82, h: 82, count: 4, speed: 0, alpha: 1},
+        Numbers: {x: 0, y: 398, w: 46, h: 84, count: 10, speed: 0, alpha: 1}
+    };
+
+    const Difficulty = {
+        Level_1: {Buttons: {Row: 10, Col: 10}, Mines: 10, caption: "Level 1"},
+        Level_2: {Buttons: {Row: 15, Col: 15}, Mines: 25, caption: "Level 2"},
+        Level_3: {Buttons: {Row: 20, Col: 30}, Mines: 45, caption: "Level 3"},
+    };
+
+    const NeighbourRange = {
+        rows: {from: 0, to: 0},
+        cols: {from: 0, to: 0}
+    };
+
+    //                        0        1       2       3       4             5         6        7
+    const TextColorTable = ["Blue", "Green", "Red", "Purple", "Maroon", "Turquoise", "Black", "Gray"];
+    const EMouseButton = {None: 0, Left: 1, Right: 2, Middle: 4};
+
+    const Position = {x: 0, y: 0};
+    const cvs = document.getElementById("cvs");
+    const ctx = cvs.getContext("2d");
+    const selectDifficulty = document.getElementById("selectDifficulty");
+    const imgSheet = new Image();
+    const mousePos = Object.create(Position);
+    let gameLevel = Difficulty.Level_1;
+    let gameBoard = null;
+    let buttons = [];
+    let currentButton = null;
+    let gameOver = false;
+    let hasWon = false;
+    let gameInfoLeft = null;
+    let gameInfoRight = null;
+    let hndUpdateGameTime = null;
+    let gameSeconds = 0;
+    let buttonSmiley = null;
+    let currentMouseButton = EMouseButton.None;
+    let leftCounter = 0;
+
+    //--------------------------------------------------------------------------------------------------------------------
+    //------ Classes
+    //--------------------------------------------------------------------------------------------------------------------
+
+    function TButton(aSheet, aCol, aRow) {
+        const EButtonState = {Up: 1, Down: 2, Open: 3, Kill: 4, Flag: 5, Done: 6};
+        const row = aRow;
+        const col = aCol;
+        const spi = MineSweeperSheet.ButtonNormal;
+
+        const pos = Object.create(Position);
+        pos.x = MineSweeperSheet.Board.LeftMiddle.w + (col * spi.w);
+        pos.y = MineSweeperSheet.Board.TopMiddle.h + (row * spi.h);
+        const sp = new TSprite(imgSheet, spi, pos);
+        const bounds = {
+            left: pos.x + 5,
+            top: pos.y + 5,
+            right: pos.x + spi.w - 5,
+            bottom: pos.y + spi.h - 5
+        };
+        let btnState = EButtonState.Up;
+        let mineInfo = 0;
+
+
+        this.draw = function () {
+            switch (btnState) {
+                case EButtonState.Up:
+                    sp.setIndex(0);
+                    sp.draw();
+                    break;
+                case EButtonState.Down:
+                    sp.setIndex(1);
+                    sp.draw();
+                    break;
+                case EButtonState.Open:
+                    if (mineInfo < 0) {
+                        sp.setIndex(5);
+                    } else {
+                        sp.setIndex(2);
+                    }
+                    sp.draw();
+                    if (mineInfo > 0) {
+                        ctx.font = "36px Verdana";
+                        ctx.fillStyle = TextColorTable[mineInfo - 1];
+                        ctx.fillText(mineInfo.toString(), pos.x + 12, pos.y + 36);
+                    }
+                    break;
+                case EButtonState.Kill:
+                    sp.setIndex(4);
+                    sp.draw();
+                    break;
+                case EButtonState.Flag:
+                    sp.setIndex(3);
+                    sp.draw();
+                    break;
+            }
+        };
+
+        this.isMouseOver = function () {
+            if (btnState === EButtonState.Open) {
+                return false;
+            }
+            return !((mousePos.x < bounds.left) || (mousePos.y < bounds.top) || (mousePos.x > bounds.right) || (mousePos.y > bounds.bottom))
+        };
+
+        this.setDown = function () {
+            if (btnState === EButtonState.Up) {
+                btnState = EButtonState.Down;
+                this.draw();
+            }
+        };
+
+        this.setUp = function () {
+            if (btnState === EButtonState.Down) {
+                btnState = EButtonState.Up;
+            }
+            this.draw();
+        };
+
+        this.checkIfWon = function () {
+            let openCount = 0;
+            for (let i = 0; i < buttons.length; i++) {
+                if (buttons[i].isOpen()) {
+                    openCount++;
+                    if(openCount == buttons.length - gameLevel.Mines){
+                        hasWon = true;
+                        btnState = EButtonState.Done;
+                        setTimeout(cvsMouseUp(),200);
+                    }
+                }
+            }
+        };
+
+        this.open = function () {
+                if (btnState === EButtonState.Down) {
+                    if (mineInfo < 0) {
+                        btnState = EButtonState.Kill;
+                        gameOver = true;
+                        drawGame();
+                        return;
+                    } else {
+                        btnState = EButtonState.Open;
+                        setTimeout(this.checkIfWon, 10);
+                    }
+                    this.draw();
+                    this.openNeighbour(false);
+                } else if (gameOver && (btnState === EButtonState.Up)) {
+                    btnState = EButtonState.Open;
+            }
+        };
+
+        this.setMine = function () {
+            mineInfo = -1;
+            setNeighbourMineInfo();
+        };
+        this.toggleFlag = function () {
+            if (btnState === EButtonState.Flag) {
+                btnState = EButtonState.Up;
+                this.draw();
+                leftCounter--;
+            } else if (btnState === EButtonState.Up && (gameLevel.Mines-leftCounter > 0)) {
+                btnState = EButtonState.Flag;
+                this.draw();
+                leftCounter++;
+            }
+            let pos = Object.create(Position);
+            pos.x = 21;
+            pos.y = 22;
+            gameInfoLeft = new TGameInfo(pos, gameLevel.Mines-leftCounter);
+            gameInfoLeft.draw();
+        };
+
+        this.isMine = function () {
+            return mineInfo < 0;
+        };
+
+        this.incMineInfo = function () {
+            if (mineInfo >= 0) {
+                mineInfo++;
+            }
+        };
+
+        this.isOpen = function () {
+            return btnState === EButtonState.Open;
+        };
+
+        function setNeighbourMineInfo() {
+            const range = getNeighbourRange();
+            let buttonIndex = 0;
+            for (let indexRow = range.rows.from; indexRow <= range.rows.to; indexRow++) {
+                for (let indexCol = range.cols.from; indexCol <= range.cols.to; indexCol++) {
+                    buttonIndex = (indexRow * gameLevel.Buttons.Col) + indexCol;
+                    let button = buttons[buttonIndex];
+                    if (button.isMine() === false) {
+                        button.incMineInfo();
+                    }
+                }
+            }
+        };
+
+        function getNeighbourRange() {
+            const range = Object.create(NeighbourRange);
+            range.rows.from = row - 1;
+            range.rows.to = row + 1;
+            range.cols.from = col - 1;
+            range.cols.to = col + 1;
+
+            if (range.rows.from < 0) {
+                range.rows.from = 0;
+            }
+            if (range.rows.to >= gameLevel.Buttons.Row) {
+                range.rows.to = gameLevel.Buttons.Row - 1;
+            }
+            if (range.cols.from < 0) {
+                range.cols.from = 0;
+            }
+            if (range.cols.to >= gameLevel.Buttons.Col) {
+                range.cols.to = gameLevel.Buttons.Col - 1;
+            }
+            return range;
+        }
+
+        this.openNeighbour = function (aVisit) {
+            if (mineInfo > 0) {
+                btnState = EButtonState.Open;
+                this.draw();
+            } else if (mineInfo === 0) {
+                if (!aVisit) {
+                    btnState = EButtonState.Open;
+                    this.draw();
+                    this.openNeighbour(true);
+                }
+                const range = getNeighbourRange();
+                for (let indexRow = range.rows.from; indexRow <= range.rows.to; indexRow++) {
+                    for (let indexCol = range.cols.from; indexCol <= range.cols.to; indexCol++) {
+                        const buttonIndex = (indexRow * gameLevel.Buttons.Col) + indexCol;
+                        const button = buttons[buttonIndex];
+                        if (!button.isOpen()) {
+                            button.openNeighbour(false);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    function TGameInfo(aPos, aNumber) {
+        const pos = aPos;
+        const size = {width: 142, height: 84};
+        const spl = [];
+        let txtNumber = "000";
+        for (let i = 0; i < 3; i++) {
+            const newPos = Object.create(Position);
+            newPos.x = pos.x + 3 + (i * MineSweeperSheet.Numbers.w);
+            newPos.y = pos.y;
+            spl.push(new TSprite(imgSheet, MineSweeperSheet.Numbers, newPos));
+        }
+
+        this.draw = function () {
+            ctx.fillStyle = "black";
+            ctx.fillRect(pos.x, pos.y, size.width, size.height);
+            for (let i = 0; i < spl.length; i++) {
+                const sp = spl[i];
+                const index = parseInt(txtNumber.charAt(i));
+                sp.setIndex(index);
+                sp.draw();
+            }
+        };
+
+        this.setNumber = function (aNumber) {
+            if (aNumber < 0) {
+                txtNumber = "000";
+                return;
+            }
+            txtNumber = aNumber.toString();
+            while (txtNumber.length < 3) {
+                txtNumber = "0" + txtNumber;
+            }
+            this.draw();
+        };
+
+        this.setNumber(aNumber);
+
+
+    } // End of TGameInfo Class
+
+    function TButtonSmiley() {
+        const EButtonState = {Up: 0, Down: 1, Kill: 2, Done: 3};
+        const pos = Object.create(Position);
+        pos.x = (cvs.width / 2) - (MineSweeperSheet.ButtonSmiley.w / 2);
+        pos.y = 23;
+        const sp = new TSprite(imgSheet, MineSweeperSheet.ButtonSmiley, pos);
+        const bounds = {
+            left: pos.x + 5,
+            top: pos.y + 5,
+            right: pos.x + MineSweeperSheet.ButtonSmiley.w - 5,
+            bottom: pos.y + MineSweeperSheet.ButtonSmiley.h - 5
+        };
+        let btnState = EButtonState.Up;
+
+        this.draw = function () {
+            sp.setIndex(btnState);
+            sp.draw();
+        };
+
+        this.setDown = function () {
+            btnState = EButtonState.Down;
+            this.draw();
+        };
+
+        this.setUp = function () {
+            btnState = EButtonState.Up;
+            this.draw();
+        };
+
+        this.setKill = function () {
+            btnState = EButtonState.Kill;
+            this.draw();
+        };
+
+        this.setDone = function () {
+            btnState = EButtonState.Done;
+            this.draw();
+        };
+
+        this.isMouseOver = function () {
+            return !((mousePos.x < bounds.left) || (mousePos.y < bounds.top) || (mousePos.x > bounds.right) || (mousePos.y > bounds.bottom));
+        }
+
+    } // End of TButtonSmiley
+
+
+    //--------------------------------------------------------------------------------------------------------------------
+    //------ Function and Events
+    //--------------------------------------------------------------------------------------------------------------------
+
+    function createButtons() {
+        buttons.length = 0;
+        for (let rowIndex = 0; rowIndex < gameLevel.Buttons.Row; rowIndex++) {
+            for (let colIndex = 0; colIndex < gameLevel.Buttons.Col; colIndex++) {
+                buttons.push(new TButton(imgSheet, colIndex, rowIndex));
+            }
+        }
+        let mineCount = 0;
+        do {
+            const buttonIndex = Math.floor(Math.random() * buttons.length);
+            if (!buttons[buttonIndex].isMine()) {
+                buttons[buttonIndex].setMine();
+                mineCount++;
+            }
+        } while (mineCount < gameLevel.Mines);
+    };
+
+
+    function fillSelectDifficulty() {
+        const keys = Object.keys(Difficulty);
+        for (let i = 0; i < keys.length; i++) {
+            const newOption = document.createElement("option");
+            newOption.value = keys[i];
+            newOption.innerText = Difficulty[keys[i]].caption;
+            selectDifficulty.appendChild(newOption);
+        }
+    }
+
+    function newGame() {
+        hasWon = false;
+        gameOver = false;
+        gameSeconds = 0;
+        leftCounter = 0;
+        cvs.width = (gameLevel.Buttons.Col * MineSweeperSheet.ButtonNormal.w) + MineSweeperSheet.Board.LeftMiddle.w + MineSweeperSheet.Board.RightMiddle.w;
+        cvs.height = (gameLevel.Buttons.Row * MineSweeperSheet.ButtonNormal.h) + MineSweeperSheet.Board.TopMiddle.h + MineSweeperSheet.Board.BottomMiddle.h;
+        gameBoard = new TGameBoard(imgSheet, MineSweeperSheet.Board);
+        let pos = Object.create(Position);
+        pos.x = 21;
+        pos.y = 22;
+        gameInfoLeft = new TGameInfo(pos, gameLevel.Mines);
+
+        pos = Object.create(Position);
+        pos.x = cvs.width - 163;
+        pos.y = 22;
+        gameInfoRight = new TGameInfo(pos, gameSeconds);
+
+        createButtons();
+
+        if (hndUpdateGameTime) {
+            window.clearInterval(hndUpdateGameTime);
+            hndUpdateGameTime = null;
+        }
+
+        hndUpdateGameTime = window.setInterval(updateGameTime, 1000);
+
+        buttonSmiley = new TButtonSmiley();
+
+        drawGame();
+    }
+
+    function updateGameTime() {
+        if (!hasWon) {
+            gameSeconds++;
+            gameInfoRight.setNumber(gameSeconds);
+        }
+    }
+
+    function drawGame() {
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        gameBoard.draw();
+
+        if (gameOver) {
+            window.clearInterval(hndUpdateGameTime);
+            hndUpdateGameTime = null;
+        }
+
+        for (let i = 0; i < buttons.length; i++) {
+            if (gameOver) {
+                if (buttons[i].isMine()) {
+                    buttons[i].open();
+                }
+            }
+            buttons[i].draw();
+        }
+        gameInfoLeft.draw();
+        gameInfoRight.draw();
+        buttonSmiley.draw();
+    }
+
+    function setMousePos(aEvent) {
+        const bounds = cvs.getBoundingClientRect();
+        mousePos.x = aEvent.clientX - bounds.left;
+        mousePos.y = aEvent.clientY - bounds.top;
+    }
+
+    function cvsMouseMove(aEvent) {
+        // Mouse move over canvas
+        setMousePos(aEvent);
+        let button = null;
+        if (!gameOver && !hasWon) {
+            for (let i = 0; i < buttons.length; i++) {
+                if (buttons[i].isMouseOver()) {
+                    button = buttons[i];
+                }
+            }
+        }
+        if ((!button) && (buttonSmiley.isMouseOver())) {
+            button = buttonSmiley;
+        }
+        if ((currentButton !== null) && (currentButton !== button)) {
+            currentButton.setUp();
+        }
+        currentButton = button;
+        if (currentButton !== null) {
+            cvs.style.cursor = "pointer";
+        } else {
+            cvs.style.cursor = "";
+        }
+    }
+
+    function cvsMouseDown(aEvent) {
+        // Mouse button down in canvas
+        currentMouseButton = aEvent.buttons;
+        if (currentButton && (currentMouseButton === EMouseButton.Left)) {
+                currentButton.setDown();
+                buttonSmiley.setDown();
+        }
+    }
+
+    function cvsMouseUp() {
+        // Mouse button up in canvas
+        if (hasWon){
+            buttonSmiley.setDone();
+        }
+        if (currentMouseButton === EMouseButton.Left) {
+            if (currentButton === buttonSmiley) {
+                currentButton.setUp();
+                currentButton = null;
+                newGame();
+            } else if (currentButton) {
+                currentButton.open();
+                if (gameOver) {
+                    buttonSmiley.setKill();
+                }else{
+                    buttonSmiley.setUp();
+                }
+                currentButton = null;
+            }
+        } else if (currentMouseButton === EMouseButton.Right) {
+            if (currentButton && (currentButton !== buttonSmiley)) {
+                currentButton.toggleFlag();
+            }
+        }
+    }
+
+    function loadGame() {
+        newGame();
+    }
+
+
+    function selectDifficultyChange() {
+        gameLevel = Difficulty[selectDifficulty.value];
+        newGame();
+    }
+
+
+    //--------------------------------------------------------------------------------------------------------------------
+    //------ Main Code
+    //--------------------------------------------------------------------------------------------------------------------
+    imgSheet.addEventListener("load", loadGame);
+    imgSheet.src = "MineSweeperSheet.png";
+    cvs.addEventListener("mousemove", cvsMouseMove);
+    cvs.addEventListener("mousedown", cvsMouseDown);
+    cvs.addEventListener("mouseup", cvsMouseUp);
+    document.addEventListener('contextmenu', event => event.preventDefault());
+    selectDifficulty.addEventListener("change", selectDifficultyChange);
+
+    fillSelectDifficulty();
+
+
+</script>
+<h3><b>
+    1) Forklar hvordan knappene er bygget opp, tenker da på rader og kolonner,
+    er det vesentlig med rekkefølgen, må rader komme før kolonner eller motsatt?
+</b></h3>
+Knappene er bygget opp med to forløkker, hvor den ene lager knapper horisontalt og den andre lager de vertikalt.
+    Akkurat i dette spillet hvor spillbrettet er kvadratisk har det ikke så mye å bety om man blander kolonner og rader, men i tilfeller hvor
+    det ikke er kvadratisk er det lurt å vite at programmer skriver ut fra toppen på venstre side og til høyre, før det går ned et nivå, som at man leser en bok. Derfor er det viktig å starte
+    med rader i første forløkke og kolonner i andre forløkke.
+</p><h3><b>
+    2) Forklar litt hvordan programmet kan «utvides» (bredde og høde) når vi bruker
+    sprites i en grafisk pakke? Hva skjer om bare «skalerer» opp eller ned?
+</b></h3><p>
+    Bakgrunnen blir på mange måter delt opp i 8 deler som hver blir tegnet. Dette gjør det mulig å skalere opp enkelte deler av bakgrunnen uten at det går ut over f.eks toppmenyen eller kantene rundt. Hver del blir laget som eget objekt og satt i en array. Alle delene som er i midten blir brukt setScale() funksjon på, for å skalere opp eller ned i forhold til om man spiller på Difficulty level_1, 2 eller 3. Dersom man bare skalerer opp eller ned hele spriten ville f.eks infoen på venstre og høyre side blitt feil størrelse i forhold til resten av spritesheeten, og derfor er det nødvendig å dele bildet opp.
+
+</p><h3><b>
+    3) Drøft litt hvordan vi kan finne naboene til en celle, og litt om hva som skjer når vi prøver å
+    finne naboene til celle som ligger på kanten/hjørnet av canvaset.
+</b></h3><p>
+    Enkelt forklart bruker vi forløkker for å løpe gjennom alle knappene på spillet, og dersom programmet løper over en mine vil nabocellene få økt mineinfo. Ettersom forløkkene vet hvilken knapp som sjekkes til en hver tid, i tillegg til at programmet vet hvor lange radene og kolonnene er, vil det ikke økes mineinfo utenfor canvaset, da programmet vet hvor mange knapper den er fra enden av canvaset.
+
+</p><h3><b>
+    4) Prøv og forklar hvordan algoritmen fungerer, når vi påroper en celles nabo.
+    Ikke gå så veldig i detalj, prøv å fokusere på rekursjon, hvor lenge varer den og hva er kriteriene for å stoppe.
+</b></h3>
+<p>
+    Rekursjon vil si at en funksjon påroper seg selv, og det gir oss mange muligheter når man lager spill som minesweeper. Spillet ville tatt veldig lang tid dersom man var nødt å åpne hver knapp for seg selv, så derfor har vi en funksjon som heter OpenNeighbour som gjør jobben for oss. Det som skjer er at brukeren trykker på en knapp, dersom knappen har mineInfo, det vil si at den har en eller flere miner som nabo, vil bare den knappen åpnes, og funksjonen er ferdig. Dersom det ikke er noe mineInfo i cellen som åpnes, vil nabocellene i alle fire retninger åpnes, og funksjonen påkaller seg selv. Da sjekker den de nye cellene om de har mineinfo eller ikke, og dersom svaret er nei, fortsetter programmet å sjekke nabocellene til de nye knappene, dersom de knappene ikke er åpnet.
+    Dette fortsetter frem til man enten har kommet til enden av canvaset, eller det er mineInfo i alle celler rundt. Da avsluttes funksjonen og brukeren kan spille videre. Selv om dette høres mye ut går det i løp av millisekunder, funksjonen har veldig enkle retningslinjer for når den skal fortsette og når den skal stoppe.
+</p>
+
+</body>
+</html>
