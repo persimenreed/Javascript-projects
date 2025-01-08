@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="no" style="display: table; margin: auto;">
+<head>
+  <meta charset="UTF-8" content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>Task 5.2</title>
+  <style>
+    body{
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      display: table-cell;
+      vertical-align: middle;
+      text-align: center;
+    }
+  </style>
+  <script src="../Sound/tone.js"></script>
+  <script src="../Sprite/Sprite.js"></script>
+</head>
+<body>
+<h2><label for="cvs">Simon Says</label></h2>
+<canvas id="cvs" height="100px" width="100px" style="background-color: antiquewhite"></canvas>
+  <h4>Press F12 to debug (Chrome and Firefox)</h4>
+<script>
+  "use strict";
+  //--------------------------------------------------------------------------------------------------------------------
+  //------ Variables, Constants and Objects
+  //--------------------------------------------------------------------------------------------------------------------
+  const SimonSaysSheet = {
+    Background: {x: 0, y: 0, w: 720, h: 720, count: 2, speed: 0, alpha: 1},
+    ButtonYellow: {x: 0, y: 720, w: 314, h: 314, count: 2, speed: 0, alpha: 1, pos: {x: 29, y: 377, r1: 100, r2: 333}},
+    ButtonBlue: {x: 0, y: 1034, w: 314, h: 314, count: 2, speed: 0, alpha: 1, pos: {x: 377, y: 377, r1: 100, r2: 333}},
+    ButtonRed: {x: 0, y: 1348, w: 314, h: 314, count: 2, speed: 0, alpha: 1, pos: {x: 377, y: 29, r1: 100, r2: 333}},
+    ButtonGreen: {x: 0, y: 1662, w: 314, h: 314, count: 2, speed: 0, alpha: 1, pos: {x: 29, y: 29, r1: 100, r2: 333}},
+    ButtonStartEnd: {x: 0, y: 1976, w: 360, h: 360, count: 2, speed: 0, alpha: 1, pos: {x: 180, y: 180, r1: 1, r2: 180}
+    }
+  };
+
+  const EGameStatus = {
+    Start: 1,
+    Running: 2,
+    Sequence: 3,
+    GameOver: 4
+  };
+
+  const Position = {x: 0, y: 0};
+  const centerGame = {x: SimonSaysSheet.Background.w/2, y: SimonSaysSheet.Background.h/2};
+  const cvs = document.getElementById("cvs");
+  const ctx = cvs.getContext("2d");
+  const imgSheet = new Image();
+  const mousePos = Object.create(Position);
+  let background = null;
+  const buttons = [];
+  let currentButton = null;
+  let toneAudio = null;
+  let tone = null;
+  let startEndButton = null;
+  let gameStatus = EGameStatus.Start;
+  const buttonsSeq = [];
+  let seqIndex = 0;
+  let score = 0;
+
+
+
+  //--------------------------------------------------------------------------------------------------------------------
+  //------ Classes
+  //--------------------------------------------------------------------------------------------------------------------
+  function  TBackground(){
+    const pos = Object.create(Position);
+    const sp = new TSprite(imgSheet, SimonSaysSheet.Background, pos);
+
+    this.draw = function () {
+      sp.draw();
+    }
+  }
+
+  function Tbutton(aSpi){
+    const pos = aSpi.pos;
+    const sp = new TSprite(imgSheet, aSpi, pos);
+    const bounds = {left: pos.x, top: pos.y, right: pos.x + aSpi.w, bottom: pos.y + aSpi.h};
+    let tone = null;
+
+    this.draw = function(){
+      sp.draw();
+    };
+
+    this.mouseOver = function(){
+      return isMouseInsideButton(bounds, pos.r1, pos.r2);
+    };
+
+    this.down = function () {
+      sp.setIndex(1);
+      sp.draw();
+      tone.play();
+    };
+
+    this.up = function () {
+      sp.setIndex(0);
+      sp.draw();
+      tone.stop();
+    };
+
+    this.setTone = function (aTone) {
+      tone = aTone;
+    }
+  }
+
+  function TstartEndButton(){
+    const pos = SimonSaysSheet.ButtonStartEnd.pos;
+    const spi = SimonSaysSheet.ButtonStartEnd;
+    const sp = new TSprite(imgSheet, spi, pos);
+    const bounds = {left: pos.x, top: pos.y, right: pos.x + spi.w, bottom: pos.y + spi.h};
+    this.draw = function () {
+      if (gameStatus === EGameStatus.GameOver){
+        sp.setIndex(1);
+      }
+      sp.draw();
+    };
+
+    this.mouseOver = function(){
+      return isMouseInsideButton(bounds, pos.r1, pos.r2);
+    };
+
+  }
+  //--------------------------------------------------------------------------------------------------------------------
+  //------ Function and Events
+  //--------------------------------------------------------------------------------------------------------------------
+  function isMouseInsideButton(aBounds,r1,r2){
+    let isOver = !((mousePos.x < aBounds.left) || (mousePos.y < aBounds.top) || (mousePos.x > aBounds.right) || (mousePos.y > aBounds.bottom));
+    if (isOver) {
+      let hyp = Math.pow(mousePos.x - centerGame.x, 2) + Math.pow(mousePos.y - centerGame.y, 2);
+      hyp = Math.sqrt(hyp);
+      isOver = (hyp > r1) && (hyp < r2);
+    }
+    return isOver;
+  }
+
+
+  function setMousePos(aEvent) {
+    const bounds = cvs.getBoundingClientRect();
+    mousePos.x = aEvent.clientX - bounds.left;
+    mousePos.y = aEvent.clientY - bounds.top;
+  }
+
+  function cvsMouseMove(aEvent) {
+    setMousePos(aEvent);
+    // Mouse move over canvas
+    cvs.style.cursor = "";
+    if (gameStatus === EGameStatus.Running) {
+      for (let i = 0; i < buttons.length; i++) {
+        if (buttons[i].mouseOver() === true) {
+          cvs.style.cursor = "pointer";
+          currentButton = buttons[i];
+        }
+      }
+    }else {
+      if (startEndButton.mouseOver()){
+        cvs.style.cursor = "pointer";
+        currentButton = startEndButton;
+      }
+    }
+  }
+
+  function cvsMouseDown() {
+    // Mouse button down in canvas
+    if (toneAudio === null){
+      toneAudio = new TToneAudio();
+      let newTone = toneAudio.createTone(Notes.C[4]);
+      buttons[0].setTone(newTone);
+      newTone = toneAudio.createTone(Notes.A[4]);
+      buttons[1].setTone(newTone);
+      newTone = toneAudio.createTone(Notes.B[4]);
+      buttons[2].setTone(newTone);
+      newTone = toneAudio.createTone(Notes.D[4]);
+      buttons[3].setTone(newTone);
+    }
+
+    if (cvs.style.cursor === "pointer"){
+      if (gameStatus === EGameStatus.Running) {
+        currentButton.down();
+      }
+      if (gameStatus === EGameStatus.GameOver){
+        location.reload();
+      }
+    }
+  }
+
+  function cvsMouseUp() {
+    // Mouse button up in canvas
+    if (cvs.style.cursor === "pointer"){
+      if (gameStatus === EGameStatus.Running) {
+        currentButton.up();
+        const buttonIndex = buttonsSeq[seqIndex];
+        const userIndex = buttons.indexOf(currentButton);
+        if(buttonIndex === userIndex){
+          // correct answer
+          seqIndex++;
+          if(seqIndex >= buttonsSeq.length){
+            score++;
+            gameStatus = EGameStatus.Sequence;
+            drawGame();
+            addSeq();
+          }
+        }else{
+          // wrong answer
+          gameStatus = EGameStatus.GameOver;
+          drawGame();
+        }
+      }else{
+        startGame();
+      }
+    }
+  }
+
+  function loadGame(){
+    // Sprite sheet is loaded and game can start!
+    background = new TBackground();
+    buttons.push(
+            new Tbutton(SimonSaysSheet.ButtonYellow),
+            new Tbutton(SimonSaysSheet.ButtonBlue),
+            new Tbutton(SimonSaysSheet.ButtonGreen),
+            new Tbutton(SimonSaysSheet.ButtonRed)
+    );
+    startEndButton = new TstartEndButton();
+    drawGame();
+  }
+
+  function drawGame() {
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+    background.draw();
+    ctx.font = "20px Arial";
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.fillText(score, SimonSaysSheet.Background.w/2 , SimonSaysSheet.Background.h/2 + 48);
+    for (let i = 0; i < buttons.length; i++) {
+      buttons[i].draw();
+    }
+    if (gameStatus !== EGameStatus.Running && gameStatus !== EGameStatus.Sequence) {
+      startEndButton.draw();
+    }
+    if (gameStatus === EGameStatus.GameOver){
+      ctx.font = "40px Arial";
+      ctx.fillText(score, SimonSaysSheet.Background.w/2 , SimonSaysSheet.Background.h/2 + 120);
+    }
+  }
+
+    function startGame(){
+      gameStatus = EGameStatus.Running;
+      drawGame();
+      addSeq();
+    }
+
+    function addSeq(){
+    buttonsSeq.push(
+            Math.floor(Math.random() * buttons.length)
+    );
+    window.setTimeout(startSeq,1000);
+    }
+
+    function startSeq(){
+    seqIndex = 0;
+    playButton();
+    }
+
+    function playButton(){
+    const buttonIndex = buttonsSeq[seqIndex];
+    buttons[buttonIndex].down();
+    window.setTimeout(stopButton, 1000);
+    }
+
+    function stopButton(){
+      const buttonIndex = buttonsSeq[seqIndex];
+      buttons[buttonIndex].up();
+      seqIndex++;
+      if (seqIndex < buttonsSeq.length){
+        window.setTimeout(playButton, 500);
+      }else{
+        seqIndex = 0; //Reset of seqIndex
+        gameStatus = EGameStatus.Running;
+      }
+    }
+
+
+
+
+  //--------------------------------------------------------------------------------------------------------------------
+  //------ Main Code
+  //--------------------------------------------------------------------------------------------------------------------
+  imgSheet.addEventListener("load", loadGame);
+  imgSheet.src = "SimonSaysSheet.png";
+  cvs.width = SimonSaysSheet.Background.w;
+  cvs.height = SimonSaysSheet.Background.h;
+  cvs.addEventListener("mousemove", cvsMouseMove);
+  cvs.addEventListener("mousedown", cvsMouseDown);
+  cvs.addEventListener("mouseup", cvsMouseUp);
+  document.addEventListener('contextmenu', aEvent => aEvent.preventDefault());
+
+</script>
+
+</body>
+
+<p>
+  1) Vi kan visualisere de forskjellige statusene til en knapp ved at vi har en sprite med to bilder.
+  Et bilde for når knappen er normal og en for når knappen er inntrykket. Skyggene på knappen vil vere
+  annerledes på knappen når den er nedtrykket enn når den er normal. Når vi trykker på knappen kjører
+  MouseDown funksjonen som endrer statusen til knappen til å vise når knappen er nedtrykket. Når vi slipper musen
+  blir knappen normal.
+  <br>
+  2) Sekvensen blir laget med en Math.random funksjon som legger til et tilfeldig tall fra 0-3 i en array. Vert tall tilsvarer
+  en knapp. Denne arrayen blir så vist for brukeren ved at knappene i arrayen trykkes ned. Deretter taster brukeren inn en sekvens,
+  denne sekvensen blir laget i en ny array. Vi tester så om disse to arrayene er like. Hvis de er like vil programmet legge til
+  et nytt tall i sekvensen, og spillet fortsetter.
+  <br>
+  3)
+  Vi bruker "time out" funksjoner fordi programmet kjører for fort til at brukeren skal klare å oppfatte
+  hva som skjer. Derfor må programmet "vente". Vi har tre forskjellige time out funksjoner. Disse funksjonene brukes
+  når programmet skal kjøre gjennom sekvensen. Vi har en timeout for hvor lenge programmet skal holde knappen nede,
+  en timeout for hvor lenge det skal vere mellom ver knapp trykkes ned og en timeout for hvor lenge det programmet
+  skal vente før den kjører en ny sekvens etter brukeren har suksessfult gjennomført en sekvens.
+
+
+
+
+</p>
+</html>
