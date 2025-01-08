@@ -16,4 +16,10 @@ Minor Javascript projects from the courses DAT101 and DAT200.
 ## Javascript art
 ![Screenshot of the art](images/16.PNG)
 
+## Splines
+![Screenshot of splines](images/17.PNG)
+
+## Figures
+![Screenshot of figures](images/18.PNG)
+
 
