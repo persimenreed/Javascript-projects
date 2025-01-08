@@ -1,10 +1,19 @@
 # Javascript-projects
 Minor Javascript projects from the courses DAT101 and DAT200.
 
+## Paint (Exam project in DAT101)
+![Screenshot of exam project, Paint](5.png)
 
-# Excavator
-A project in DAT200 where an excavator was created in 3Ds Max, and configured using javascript. 
+## Minesweeper
+![Screenshot of the game minesweeper](2.png)
 
-Because of CORS (Cross-Origin Resource Sharing) policies enforced by modern browsers, the easiest way to get the project to run is to start a localhost server for example through *python -m http.server 8000* and just navigate to the folder.    
-![Screenshot of the excavator](1.png)
+## Flappy bird
+![Screenshot of the game flappy bird](3.png)
+
+## Simon Says
+![Screenshot of the game simon says](4.png)
+
+## Javascript art
+![Screenshot of the art](16.png)
+
 
