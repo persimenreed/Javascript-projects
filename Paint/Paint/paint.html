@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="no" style="display: table; margin: auto;">
+<head>
+    <meta charset="UTF-8" content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Paint</title>
+    <link rel="stylesheet" href="paint.css">
+    <script src="../Script/Common.js"></script>
+    <script src="../Script/Sprite.js"></script>
+</head>
+<body>
+<h2><label for="cvs">Paint</label></h2>
+<table>
+    <tr>
+        <td>
+            <canvas id="cvs" width="775" height="115"
+                    style="background-color: floralwhite; border: thin  gray solid"></canvas>
+        </td>
+        <td>
+            <div id="paintObjectList"></div>
+        </td>
+    </tr>
+</table>
+<br/>
+<canvas id="cvsPaint" width="1000" height="500" style="background-color: ghostwhite; border: thin  gray solid"></canvas>
+<h4>Press F12 to debug (Chrome and Firefox)</h4>
+<fieldset>
+    <legend>Paint Log</legend>
+    <span id="txtLog"></span>
+</fieldset>
+<script src="menu.js"></script>
+<script>
+    "use strict";
+    //------------------------------------------------------------------------------------------------------------------
+    //------ Variables, Constants and Objects
+    //------------------------------------------------------------------------------------------------------------------
+
+    const cvsPaint = document.getElementById("cvsPaint"); //Paint CVS
+    const ctxPaint = cvsPaint.getContext("2d"); //paint context
+
+    const NewLine = "<br />";
+    const txtLog = document.getElementById("txtLog");
+    const imgSheet = new Image();
+    const mousePos = new TPosition(0, 0);
+
+    let shapes = [];
+    const properties = [];
+    let currentShape = null;
+    let currentProperties = null;
+    let radius;
+    let allSelected = false;
+
+    let selectedStrokeColor = null;
+    let selectedFillColor = null;
+    let selectedShape = null;
+    let selectedStrokeSize = null;
+    let selectedActionKey = null;
+    let printShape = null;
+    let objects = [];
+    let newObjects = [];
+    let newShapes = [];
+
+    //------------------------------------------------------------------------------------------------------------------
+    //------ Classes
+    //------------------------------------------------------------------------------------------------------------------
+
+
+    function TPosition(aX, aY) {
+        this.x = aX;
+        this.y = aY;
+    }// End of class TPosition
+
+    function TShape(aProperties, aStartPos) {
+        const properties = aProperties;
+        const startPoint = new TPosition(aStartPos.x, aStartPos.y);
+        const points = []; // Making a array of positions, start position is the first one
+        let rubberBandPos = aStartPos; // This is the visual rubber band, sows the figure while drawing.
+
+        //finner ut hvilken shape brukeren ønsker og tegner hvert objekt for seg.
+        this.draw = function () {
+            ctxPaint.beginPath();
+            ctxPaint.fillStyle = properties.fillStyle;
+            ctxPaint.strokeStyle = properties.strokeStyle;
+            ctxPaint.lineWidth = properties.lineWidth;
+            switch (properties.type) {
+                case EShapeType.Pen:
+                case EShapeType.Line:
+                    ctxPaint.beginPath();
+                    ctxPaint.moveTo(startPoint.x, startPoint.y); //Move canvas pen to start point
+                    for (let i = 0; i < points.length; i++) {
+                        ctxPaint.lineTo(points[i].x, points[i].y); // creating the path to every position in the array
+                    }
+                    if (rubberBandPos) {
+                        ctxPaint.lineTo(rubberBandPos.x, rubberBandPos.y); // creating a path to rubber band position
+                    }
+                    ctxPaint.stroke(); //convert the path to stroke (aka line)
+                    break;
+
+                case EShapeType.Rectangle:
+                    ctxPaint.beginPath();
+                    radius = [rubberBandPos.x - startPoint.x, rubberBandPos.y - startPoint.y];
+                    ctxPaint.fillRect(startPoint.x, startPoint.y, radius[0], radius[1]);
+                    ctxPaint.strokeRect(startPoint.x, startPoint.y, radius[0], radius[1]);
+                    break;
+
+                case EShapeType.Circle:
+                    ctxPaint.beginPath();
+                    radius = Math.sqrt(Math.pow(rubberBandPos.x - startPoint.x, 2) + Math.pow(rubberBandPos.y - startPoint.y, 2));
+                    ctxPaint.arc(startPoint.x, startPoint.y, radius, 0, Math.PI * 2);
+                    ctxPaint.fill();
+                    ctxPaint.stroke();
+                    break;
+
+                case EShapeType.Oval:
+                    ctxPaint.beginPath();
+                    radius = [Math.abs(rubberBandPos.x - startPoint.x), Math.abs(rubberBandPos.y - startPoint.y)];
+                    ctxPaint.ellipse(startPoint.x, startPoint.y, radius[0], radius[1], 0, 0, Math.PI * 2);
+                    ctxPaint.fill();
+                    ctxPaint.stroke();
+                    break;
+
+                case EShapeType.Polygon: {
+                    ctxPaint.beginPath();
+                    let polygonSize = Math.sqrt(Math.pow(rubberBandPos.x - startPoint.x, 2) + Math.pow(rubberBandPos.y - startPoint.y, 2));
+                    ctxPaint.moveTo(startPoint.x + polygonSize * Math.cos(0), startPoint.y + polygonSize * Math.sin(0));
+                    for (let i = 1; i <= 6; i += 1) {
+                        ctxPaint.lineTo(startPoint.x + polygonSize * Math.cos(i * 2 * Math.PI / 6), startPoint.y + polygonSize * Math.sin(i * 2 * Math.PI / 6));
+                    }
+                    ctxPaint.closePath();
+                    ctxPaint.fill();
+                    ctxPaint.stroke();
+                }
+            }
+        };
+
+        this.addPoint = function (aPosition) {
+            if (properties.type === EShapeType.Pen) {
+                points.push(new TPosition(aPosition.x, aPosition.y));
+            }
+        };
+        this.endDrawing = function () {
+            points.push(new TPosition(rubberBandPos.x, rubberBandPos.y));
+            rubberBandPos = {x: rubberBandPos.x, y: rubberBandPos.y};
+        }
+    }
+
+    function TProperties(aType, aFillStyle, aStrokeStyle, aLineWidth) {
+        this.type = aType;
+        this.fillStyle = aFillStyle;
+        this.strokeStyle = aStrokeStyle;
+        this.lineWidth = aLineWidth;
+    }
+
+    //------------------------------------------------------------------------------------------------------------------
+    //------ Function and Events
+    //------------------------------------------------------------------------------------------------------------------
+
+    function addLogText(aText) {
+        if (txtLog.innerHTML.length > 0) {
+            txtLog.innerHTML += NewLine;
+        }
+        txtLog.innerHTML += aText;
+    }
+
+    function updateDrawing() {
+        ctxPaint.clearRect(0, 0, cvsPaint.width, cvsPaint.height);
+        for (let i = 0; i < shapes.length; i++) {
+            shapes[i].draw(); // draws every shape
+        }
+    }
+
+    function updateCanvas() {
+        ctxPaint.clearRect(0, 0, cvsPaint.width, cvsPaint.height);
+        for (let i = 0; i < shapes.length; i++) {
+            shapes[i].draw(); // draw every shapes
+        }
+    }
+
+    function loadPaintApp() {
+        createMenu(cmbClick);
+        newDrawing();
+    }
+
+    function checkProperties() {
+        // sjekker hver enkelt property om brukeren har trykket på noe, ellers får det en egendefinert verdi.
+        if (!selectedShape) {
+            selectedShape = EShapeType.Pen;
+            printShape = "Pen";
+        }
+        if (!selectedFillColor) {
+            selectedFillColor = "#ffffff";
+        }
+        if (!selectedStrokeColor) {
+            selectedStrokeColor = "#000000";
+        }
+        if (!selectedStrokeSize) {
+            selectedStrokeSize = 8;
+        }
+        if (selectedShape && selectedFillColor && selectedStrokeColor && selectedStrokeSize) {
+            allSelected = true;
+        }
+    }
+
+    function newShape() {
+        //hentes ut fra CmbClick og bestemmer hvilken shape brukeren trykket på.
+        switch (selectedShape) {
+            case "Line":
+                selectedShape = EShapeType.Line;
+                break;
+            case "Pen":
+                selectedShape = EShapeType.Pen;
+                break;
+            case "Circle":
+                selectedShape = EShapeType.Circle;
+                break;
+            case "Oval":
+                selectedShape = EShapeType.Oval;
+                break;
+            case "Rectangle":
+                selectedShape = EShapeType.Rectangle;
+                break;
+            case "Polygon":
+                selectedShape = EShapeType.Polygon;
+                break;
+        }
+    }
+
+
+    function objectPlacement() {
+        // funksjon for å bytte plass på elementer i en array
+        function move(objects, old_index, new_index) {
+            while (old_index < 0) {
+                old_index += objects.length;
+            }
+            while (new_index < 0) {
+                new_index += objects.length;
+            }
+            if (new_index >= objects.length) {
+                let k = new_index - objects.length;
+                while ((k--) + 1) {
+                    objects.push(undefined);
+                }
+            }
+            objects.splice(new_index, 0, objects.splice(old_index, 1)[0]);
+            return objects;
+        }
+        // hvis moveDown trykkes, et objektet valgt og det ikke allerede er på bunn.
+        if ((selectedActionKey === "MoveDown") && (objectList[0] != 0) && (objectIndex)) {
+            newObjects = (move(objects, objectList[0], (objectList[0] - 1)));
+            newShapes = (move(shapes, objectList[0], (objectList[0] - 1)));
+
+            updateCanvas();
+            objects = newObjects;
+            shapes = newShapes;
+            objectList = [];
+            objectIndex = null;
+            removeObjectTemp();
+        //hvis moveUp trykkes, et objekt er valgt ikke det øverste.
+        } else if ((selectedActionKey === "MoveUp") && (objectList[0] != objects.length-1) && (objectIndex)) {
+            newObjects = (move(objects, objectList[0], (objectList[0] + 1)));
+            newShapes = (move(shapes, objectList[0], (objectList[0] + 1)));
+
+            updateCanvas();
+            objects = newObjects;
+            shapes = newShapes;
+            objectList = [];
+            objectIndex = null;
+            removeObjectTemp();
+        }
+    }
+
+    function removeObjectTemp() {
+        //fjerner alle objektene i menylisten for å få rekkefølgen riktig.
+        for (let i = 0; i < shapes.length; i++) {
+            menuRemovePaintObject(objects[i]);
+        }
+        if (selectedActionKey != "New") {
+            addObjectTemp();
+        }
+    };
+
+    function addObjectTemp() {
+        //legger alle objektene i menylisten tilbake i riktig rekkefølge
+        for (let i = 0; i < shapes.length; i++) {
+            menuAddPaintObject(objects[i]);
+        }
+    };
+
+    function updateMenu() {
+        //dersom brukeren ikke har valgt noen objektknapper, slettes siste objekt.
+        if (selectedActionKey === "Eraser" && !objectIndex) {
+            menuRemovePaintObject(objects[shapes.length - 1]);
+            shapes.pop();
+            objects.pop();
+            updateDrawing();
+        } else if (selectedActionKey === "Eraser" && objectIndex) {
+            //dersom brukeren har valgt en knapp, slettes det objektet.
+            menuRemovePaintObject(objects[objectList[0]]);
+            shapes.splice(objectList[0], 1);
+            objects.splice(objectList[0], 1);
+            updateDrawing();
+            removeObjectTemp();
+        } else {
+            //det er her objektene som brukeren har tegnet blir pushet opp i en egen liste.
+            objects.push("Object " + ": " + printShape);
+            menuAddPaintObject(objects[objects.length - 1]);
+        }
+        selectedActionKey = null;
+    };
+
+    function newAction() {
+        //sjekker hvilken av actionknappene brukeren trykker på.
+        switch (selectedActionKey) {
+            case "New":
+                removeObjectTemp();
+                objects.length = 0;
+                shapes.length = 0;
+                updateCanvas();
+                addLogText("New Drawing!");
+                break;
+            case "Eraser":
+                updateMenu();
+                break;
+            case "MoveUp":
+            case "MoveDown":
+                // sjekke om brukeren har trykket på en av objektknappene
+                if (objectIndex) {
+                    objectPlacement();
+                }
+                break;
+        }
+    }
+
+    function cmbClick(aContainerKey, aButtonKey, aButtonValue) {
+        let txtLog = "Container " + aContainerKey + " => ";
+        txtLog += "Button " + aButtonKey + ", value = " + aButtonValue.toLocaleString();
+        addLogText(txtLog);
+        if (aContainerKey === "StrokeColor") {
+            selectedStrokeColor = aButtonValue;
+        } else if (aContainerKey === "FillColor") {
+            selectedFillColor = aButtonValue;
+        } else if (aContainerKey === "ShapeType") {
+            selectedShape = aButtonKey;
+            printShape = aButtonKey;
+            newShape();
+        } else if (aContainerKey === "StrokeSize") {
+            selectedStrokeSize = aButtonValue;
+        } else if (aContainerKey === "Action") {
+            selectedActionKey = aButtonKey;
+            newAction();
+        }
+        checkProperties();
+    }
+
+    function setMousePos(aEvent) {
+        const bounds = cvsPaint.getBoundingClientRect();
+        mousePos.x = aEvent.clientX - bounds.left;
+        mousePos.y = aEvent.clientY - bounds.top;
+    }
+
+    function cvsPaintMouseMove(aEvent) {
+        // Mouse move over canvas
+        setMousePos(aEvent);
+        if (currentShape) { // check to see that vi have an active shape
+            currentShape.addPoint(mousePos); // Add points to the active shape
+            updateCanvas(); // Redraw canvas
+        }
+    }
+
+    function cvsPaintMouseDown() {
+        // Mouse button down in canvas
+        if (allSelected) { // Check to see if we do not have an active shape
+            currentProperties = new TProperties(selectedShape, selectedFillColor, selectedStrokeColor, selectedStrokeSize);
+            properties.push(currentProperties);
+            currentShape = new TShape(currentProperties, mousePos); // create a new shape, use EDrawType to specify a shape type
+            shapes.push(currentShape); // Push the new shape into array
+            updateCanvas(); // Redraw canvas
+        } else {
+            checkProperties();
+            cvsPaintMouseDown();
+        }
+    }
+
+    function cvsPaintMouseUp() {
+        // Mouse button up in canvas
+        if (currentShape) {
+            currentShape.endDrawing();
+            currentShape = null;
+            currentProperties = null;
+            updateMenu();
+            updateCanvas(); // Redraw canvas
+        }
+    }
+
+
+    //------------------------------------------------------------------------------------------------------------------
+    //------ Main Code
+    //------------------------------------------------------------------------------------------------------------------
+    imgSheet.addEventListener("load", loadPaintApp);
+    imgSheet.src = "SpriteSheet_Paint.png";
+    cvsPaint.addEventListener("mousemove", cvsPaintMouseMove);
+    cvsPaint.addEventListener("mousedown", cvsPaintMouseDown);
+    cvsPaint.addEventListener("mouseup", cvsPaintMouseUp);
+
+    //document.addEventListener('contextmenu', aEvent => aEvent.preventDefault());
+
+</script>
+
+</body>
+</html>

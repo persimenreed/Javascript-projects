@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Flappy Bird</title>
+    <script src="sprite.js"></script>
+</head>
+<body>
+<canvas id="cvs" width="100px" height="100px" style="background-color: antiquewhite"></canvas>
+<p id="message" style="color:black; font-weight: normal; font-size: 25px; text-align: left"></p>
+<p style="color:black; font-weight: normal; font-size: 10px; text-align: left"></p>
+
+<audio id="flap" src="sfx_wing.wav" type="audio/wav"></audio>
+<audio id="point" src="sfx_point.wav" type="audio/wav"></audio>
+<audio id="crash" src="sfx_hit.wav" type="audio/wav"></audio>
+<audio id="die" src="sfx_die.wav" type="audio/wav"></audio>
+<script>
+
+    const FlappyBirdSheet = {
+        hero: {x: 0, y: 545, w: 34, h: 24, count: 4, speed: 0.4, alpha: 1},
+        obstacle: {x: 0, y: 0, w: 52, h: 320, count: 4, speed: 0, alpha: 1},
+        background: {x: 246, y: 0, w: 576, h: 512, count: 2, speed: 0, alpha: 1},
+        ground: {x: 246, y: 512, w: 1152, h: 114, count: 1, speed: 0, alpha: 1},
+        numberSmall: {x: 681, y: 635, w: 14, h: 20, count: 10, speed: 0, alpha: 1},
+        startGame: {x: 4, y: 629, w: 185, h: 50, count: 1, speed: 0, alpha: 1},
+        gameOver: {x: 203, y: 628, w: 200, h: 114, count: 1, speed: 0, alpha: 1}
+
+    };
+
+    const BoundsRect = {left: 0, top: 0, rigth: 0, bot: 0};
+
+    const Position = {x: 0, y: 0};
+
+    const Background = {sprite: null, pos: null};
+
+    const EGameStatus = {start: 1, running: 2, heroIsDead: 3, end: 4};
+    let gameStatus = EGameStatus.start;
+
+    function TGround() {
+        const pos = Object.create(Position);
+        pos.x = -246;
+        pos.y = cvs.height - FlappyBirdSheet.ground.h;
+        const sprite = new TSprite(imgSheet, FlappyBirdSheet.ground, pos);
+
+        function move() {
+            pos.x -= 1;
+            const maxW = FlappyBirdSheet.ground.w - cvs.width;
+            if (pos.x < -maxW) {
+                pos.x = -246;
+            }
+        }
+        this.draw = function () {
+            move();
+            sprite.draw();
+            ctx.font = "30px Verdana";
+            ctx.fillText("Score: " + score, 25, 480);
+        }
+    }
+
+    const ObstacleObject = {pos: null, sprite: null, br: null};
+    let score = 0;
+
+    function TObstacle() {
+        let del = false;
+        const gap = 120;
+        let topBottomObstacle = Math.floor(Math.random(40) * 230);
+        const bot = Object.create(ObstacleObject);
+        bot.pos = Object.create(Position);
+        bot.pos.x = FlappyBirdSheet.background.w + FlappyBirdSheet.obstacle.w;
+        bot.pos.y = FlappyBirdSheet.background.h - FlappyBirdSheet.obstacle.h - FlappyBirdSheet.obstacle.h;
+        bot.pos.y += (gap - bot.pos.y) + 25 + topBottomObstacle;
+        bot.br = Object.create(BoundsRect);
+
+        const top = Object.create(ObstacleObject);
+        top.pos = Object.create(Position);
+        top.pos.x = bot.pos.x;
+        top.pos.y = -FlappyBirdSheet.obstacle.h + (bot.pos.y - gap);
+        top.br = Object.create(BoundsRect);
+
+        bot.sprite = new TSprite(imgSheet, FlappyBirdSheet.obstacle, bot.pos, 2);
+        top.sprite = new TSprite(imgSheet, FlappyBirdSheet.obstacle, top.pos, 3);
+
+        function move() {
+            // Setter ny posisjon av hinder.
+            bot.pos.x -= 1;
+            top.pos.x -= 1;
+
+            //oppdatere topp bounds
+            top.br.left = top.pos.x;
+            top.br.top = top.pos.y;
+            top.br.right = top.pos.x + FlappyBirdSheet.obstacle.w;
+            top.br.bot = top.pos.y + FlappyBirdSheet.obstacle.h;
+
+            //oppdatere bunn bounds
+            bot.br.left = bot.pos.x;
+            bot.br.top = bot.pos.y;
+            bot.br.right = bot.pos.x + FlappyBirdSheet.obstacle.w;
+            bot.br.bot = bot.pos.y + FlappyBirdSheet.obstacle.h;
+
+            if (bot.pos.x < -FlappyBirdSheet.obstacle.w) {
+                del = true;
+            }
+
+            // sette inn scoreboard
+            if (bot.pos.x === FlappyBirdSheet.hero.w + 60) {
+                score++;
+                audioPoint.play()
+            } else {
+            }
+
+            // check if collision with hero
+            const hbr = hero.getBounds();
+            const isHit = checkCollision(hbr, top.br) || checkCollision(hbr, bot.br);
+            if (isHit === true) {
+                gameStatus = EGameStatus.heroIsDead;
+                hero.whenHit();
+                audioCrash.play();
+            }
+        }
+
+        this.draw = function () {
+            move();
+            bot.sprite.draw();
+            top.sprite.draw();
+        };
+
+        this.getDelete = function () {
+            return del;
+        }
+    }
+
+    function THero() {
+        const pos = Object.create(Position);
+        pos.x = 100;
+        pos.y = (FlappyBirdSheet.background.h - FlappyBirdSheet.ground.h) / 2;
+        const sprite = new TSprite(imgSheet, FlappyBirdSheet.hero, pos);
+        const g = 0.3;
+        let dy = 0;
+        let backwards = 0;
+        const br = Object.create(BoundsRect);
+
+        function move() {
+            dy += g;
+            pos.y += dy;
+            pos.x += backwards;
+
+            // gjøre det umulig å falle under mappet
+            if (pos.y >= FlappyBirdSheet.background.h - FlappyBirdSheet.ground.h - 20) {
+                pos.y = cvs.height - FlappyBirdSheet.ground.h - 20;
+                gameOver();
+            }
+            //gjøre det umulig å fly over hinder
+            if (pos.y < -50){
+                pos.y = -50;
+            }
+
+            br.left = pos.x;
+            br.top = pos.y;
+            br.right = pos.x + FlappyBirdSheet.hero.w;
+            br.bot = pos.y + FlappyBirdSheet.hero.h;
+        }
+
+        this.draw = function () {
+            move();
+            sprite.draw();
+        };
+        this.flap = function () {
+            dy = -6;
+            audioFlap.play()
+        };
+        this.getBounds = function () {
+            return br;
+        };
+        this.whenHit = function () {
+            backwards = -1;
+        }
+    };
+
+    //----variables and constants-----
+    const cvs = document.getElementById("cvs");
+    const ctx = cvs.getContext("2d");
+    const imgSheet = new Image();
+    let ground = null;
+    const obstacles = [];
+    let frameCount = 0;
+    let message = document.getElementById("message");
+
+    const audioFlap = document.getElementById("flap");
+    const audioPoint = document.getElementById("point");
+    const audioCrash = document.getElementById("crash");
+    const audioDie = document.getElementById("die");
+
+    //-----functions and events-------
+
+    // lagde denne for å ikke starte spillet med en gang det loades.
+    function firstClick() {
+        gameStatus = EGameStatus.running;
+        message.innerText = "";
+    };
+
+    // spritesheet for gameover. Når denne kommer skal gamestatus til end.
+    function gameOver() {
+        const pos = Object.create(Position);
+        pos.x = (FlappyBirdSheet.background.w / 2) - (FlappyBirdSheet.gameOver.w / 2);
+        pos.y = (FlappyBirdSheet.background.h - FlappyBirdSheet.ground.h) / 2;
+        const sprite = new TSprite(imgSheet, FlappyBirdSheet.gameOver, pos);
+        sprite.draw();
+        gameStatus = EGameStatus.end;
+        audioDie.play();
+        message.innerText = "Game Over! Press SPACE for å starte på nytt."
+    }
+
+    //Get ready grafikken
+    function startGame() {
+        const pos = Object.create(Position);
+        pos.x = (FlappyBirdSheet.background.w / 2) - (FlappyBirdSheet.gameOver.w / 2);
+        pos.y = (FlappyBirdSheet.background.h - FlappyBirdSheet.ground.h) / 2;
+        const sprite = new TSprite(imgSheet, FlappyBirdSheet.startGame, pos);
+        sprite.draw();
+    }
+
+    function checkCollision(br1, br2) {
+        const hit = !((br1.left > br2.right) || (br1.right < br2.left) || (br1.top > br2.bot) || (br1.bot < br2.top));
+        return hit;
+    }
+
+    function createNewObstacle() {
+        const newObstacle = new TObstacle();
+        obstacles.push(newObstacle)
+    }
+
+    function loadGame() {
+        Background.pos = Object.create(Position);
+        Background.sprite = new TSprite(imgSheet, FlappyBirdSheet.background, Background.pos);
+        ground = new TGround();
+        hero = new THero();
+        gameStatus = EGameStatus.start;
+        drawGame();
+    }
+
+    function drawGame() {
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        Background.sprite.draw();
+        if (gameStatus === EGameStatus.start) {
+            startGame();
+            message.innerText = "Press SPACE for å starte!"
+        }
+        for (let i = 0; i < obstacles.length; i++) {
+            obstacles[i].draw();
+            if (obstacles[i].getDelete()) {
+                obstacles.splice(i, 1);
+            }
+        }
+
+        ground.draw();
+        hero.draw();
+        if ((gameStatus == EGameStatus.running) || (gameStatus == EGameStatus.heroIsDead)) {
+            window.requestAnimationFrame(drawGame);
+        }
+
+        if (frameCount % 175 === 0) {
+            createNewObstacle();
+        }
+        frameCount++;
+    }
+
+    document.addEventListener("keydown", cvsClick);
+
+    function cvsClick(event) {
+        if (event.keyCode === 32) {
+            if (gameStatus === EGameStatus.start) {
+                firstClick();
+                drawGame();
+                hero.flap();
+            } else if (gameStatus === EGameStatus.heroIsDead) {
+            } else if (gameStatus === EGameStatus.end) {
+                window.location.reload();
+            } else {
+                hero.flap();
+            }
+        }
+    }
+
+    //-----------main code-----------
+    imgSheet.addEventListener("load", loadGame);
+    imgSheet.src = "FlappyBird-Sheet.png";
+    cvs.width = FlappyBirdSheet.background.w;
+    cvs.height = FlappyBirdSheet.background.h;
+
+</script>
+<p><b>
+    Diskusjonen tok såpass mye plass at spillet hoppet ned når man trykte på "space", så vi la diskusjonen i linken under her.
+</b></p>
+<a href="FlappyBird%20Discussion.html" title="discussion">Link til diskusjon</a>
+
+</body>
+</html>
