@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oppgave 2</title>
+</head>
+<body>
+<br>
+<button type="draw" onclick="drawbtn()">Draw</button>
+<button type="move" onclick="move()">Move</button>
+<button type="scale" onclick="scale()">Scale</button>
+<button type="rotate" onclick="rotate()">Rotate</button>
+<br>
+
+<canvas id="myCanvas" width="600" height="600" style="border:1px solid #d3d3d3;">
+</canvas>
+
+<script type="text/javascript">
+    let canvas = document.getElementById("myCanvas");
+    w = canvas.width;
+    h = canvas.height;
+    let ctx = canvas.getContext("2d");
+
+    let squares = [];
+    let nsquares = 0;
+    let SQUARELENGTH = 10;
+
+    let distanceX = 0;
+    let distanceY = 0;
+    let oldX = 0;
+    let oldY = 0;
+
+    let scaletest = 1;
+    let clickpos = [];
+
+    let movebtn = false;
+    let aktiv = false;
+    let scalebtn = false;
+    let rotatebtn = false;
+    let current = -1;  //Number pointing to current rectangel in the table
+    let angel = 0;
+
+    function Point(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    canvas.addEventListener("mousedown", function (e) {
+        let x = e.clientX - canvas.offsetLeft; // Alternative: var currx = e.layerX; (ikke støttet i alle browsere)
+        let y = e.clientY - canvas.offsetTop;  // Alternative: var curry = e.layerY; (ikke støttet i alle browsere)
+        current = find(x, y);
+
+        if (current < 0) //not inside a square
+            add(x, y);
+        else
+            aktiv = true;
+    }, false);
+
+    canvas.addEventListener("mouseup", function (e) {
+        clickpos = [];
+        aktiv = false;
+    }, false);
+    canvas.addEventListener("mousemove", function (e) {
+        let x = e.clientX - canvas.offsetLeft;
+        let y = e.clientY - canvas.offsetTop;
+
+        if (aktiv && scalebtn) {
+            oldX = squares[current].x;
+            oldY = squares[current].y;
+            clickpos.push(oldY);
+            if (squares[current].y < clickpos[0]) {
+                scaletest = 1.01;
+            } else if (squares[current].y > clickpos[0]) {
+                scaletest = 0.99;
+            } else {
+                scaletest = 1;
+            }
+            for (let i = 0; i < nsquares; i++) {
+                distanceX = x - oldX;
+                distanceY = y - oldY;
+
+                squares[i].x += distanceX;
+                squares[i].y += distanceY;
+
+                squares[i].x *= scaletest;
+                squares[i].y *= scaletest;
+            }
+            draw();
+
+            //Flytte på polygon
+        } else if (aktiv && movebtn) {
+            oldX = squares[current].x;
+            oldY = squares[current].y;
+            for (let i = 0; i < nsquares; i++) {
+                distanceX = x - oldX;
+                distanceY = y - oldY;
+                squares[i].x += distanceX;
+                squares[i].y += distanceY;
+            }
+            draw();
+
+            //Rotere
+
+        } else if (aktiv && rotatebtn) {
+            oldY = squares[current].y;
+            clickpos.push(oldY);
+            if (squares[current].y < y) {
+                angel = 0.01*Math.PI;
+            } else if (squares[current].y > y) {
+                angel = -0.01*Math.PI;
+            } else {
+                angel = 0.01*Math.PI;
+            }
+
+            let xr = squares[current].x;
+            let yr = squares[current].y;
+
+            for(let i=0; i<nsquares; i++){
+                oldX = squares[i].x;
+                squares[i].x = xr + (squares[i].x-xr)*Math.cos(angel) - (squares[i].y-yr)*Math.sin(angel);
+                squares[i].y = yr + (oldX-xr)*Math.sin(angel) + (squares[i].y-yr)*Math.cos(angel);
+
+            }
+            draw();
+        } else if (aktiv) {
+            squares[current].x = x;
+            squares[current].y = y;
+            draw();
+        } else {
+            if (find(x, y) >= 0) //inside a square
+                document.getElementById("myCanvas").style.cursor = "pointer";
+            else
+                document.getElementById("myCanvas").style.cursor = "auto";
+        }
+    }, false);
+
+
+    canvas.addEventListener("dblclick", function (e) {
+        let x = e.clientX - canvas.offsetLeft;
+        let y = e.clientY - canvas.offsetTop;
+        current = find(x, y);
+        if (current >= 0) remove(current);
+    }, false);
+
+    function find(x, y) {
+        for (let i = 0; i < nsquares; i++)
+            if (squares[i].x - SQUARELENGTH / 2 <= x
+                && x <= squares[i].x + SQUARELENGTH / 2
+                && squares[i].y - SQUARELENGTH / 2 <= y
+                && y <= squares[i].y + SQUARELENGTH / 2)
+                return i;
+        return -1; //Fant ikke noe rektangel i nærheten av muspeker
+    }
+
+
+    function add(x, y) {
+        squares[nsquares] = new Point(x, y);
+        current = nsquares;
+        nsquares++;
+        draw();
+    }
+
+    function remove(n) {
+        if (n < 0 || n >= nsquares)
+            return;
+
+        squares.splice(n, 1);
+        nsquares--;
+        draw();
+    }
+
+    let count = 0;
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        count++;
+        ctx.strokeStyle = "black";
+
+        for (let i = 0; i < nsquares; i++) {
+            ctx.strokeRect(squares[i].x - SQUARELENGTH / 2, squares[i].y - SQUARELENGTH
+                / 2, SQUARELENGTH, SQUARELENGTH);
+        }
+
+        for (let i = 0; i < nsquares; i++) {
+            if (nsquares === 1) {
+                ctx.moveTo(squares[0].x - SQUARELENGTH / 2, squares[0].y - SQUARELENGTH
+                    / 2);
+            } else {
+                ctx.lineTo(squares[i].x, squares[i].y);
+            }
+        }
+        if (count != 2) {
+            ctx.fillStyle = "#3399ff";
+            ctx.fill();
+            ctx.closePath();
+        }
+        ctx.stroke();
+    }
+
+    function move() {
+        movebtn = true;
+        scalebtn = false;
+        rotatebtn = false;
+    }
+
+    function drawbtn() {
+        movebtn = false;
+        rotatebtn = false;
+        scalebtn = false;
+    }
+
+    function scale() {
+        movebtn = false;
+        rotatebtn = false;
+        scalebtn = true;
+    }
+
+    function rotate() {
+        rotatebtn = true;
+        movebtn = false;
+        scalebtn = false;
+    }
+
+</script>
+
+<p><b>Draw:</b> Trykk på et hjørne for å flytte, dobbeltrykk på et hjørne for å slette.</p>
+<p><b>Move:</b> Trykk på et hjørne for å flytte polygon</p>
+<p><b>Scale:</b> Trykk på et hjørne: Dersom musen går over det punktet vil det skaleres opp, og under vil det skaleres ned. Tips: Om du skalerer ned, trykk på hjørnet på nytt for å skalere opp.</p>
+<p><b>Rotation</b> Trykk på et hjørne: Om du tar musen under det punktet vil det roteres med klokken, tar du musen over punktet vil det roteres mot klokken.</p>
+
+</body>
+</html>
+

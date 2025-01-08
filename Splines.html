@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Splines</title>
+</head>
+<body>
+<br>
+<button type="New" onclick="newbtn()">New</button>
+<button type="Toggle" onclick="toggle()">Toggle</button>
+<br>
+
+<canvas id="myCanvas" width="600" height="600" style="border:1px solid #d3d3d3;">
+</canvas>
+
+<script type="text/javascript">
+    let canvas = document.getElementById("myCanvas");
+    w = canvas.width;
+    h = canvas.height;
+    let ctx = canvas.getContext("2d");
+
+    let squares = [];
+    let curvePointsX = [];
+    let curvePointsY = [];
+    let nsquares = 0;
+    let SQUARELENGTH = 10;
+
+    let n = 500;
+    let delta = 1 / n;
+    let segments = false;
+    let segCheck = 3;
+    let loops = -1;
+
+    let clickpos = [];
+    let aktiv = false;
+    let current = -1;
+
+    let toggleCount = 0;
+
+    function Point(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    canvas.addEventListener("mousedown", function (e) {
+        let x = e.clientX - canvas.offsetLeft;
+        let y = e.clientY - canvas.offsetTop;
+        current = find(x, y);
+
+        if (current < 0) //not inside a square
+            add(x, y);
+        else
+            aktiv = true;
+    }, false);
+
+    canvas.addEventListener("mouseup", function (e) {
+        clickpos = [];
+        aktiv = false;
+    }, false);
+
+
+    function find(x, y) {
+        for (let i = 0; i < nsquares; i++)
+            if (squares[i].x - SQUARELENGTH / 2 <= x
+                && x <= squares[i].x + SQUARELENGTH / 2
+                && squares[i].y - SQUARELENGTH / 2 <= y
+                && y <= squares[i].y + SQUARELENGTH / 2)
+                return i;
+        return -1; //Fant ikke noe rektangel i nærheten av muspeker
+    }
+
+
+    function add(x, y) {
+        squares[nsquares] = new Point(x, y);
+        current = nsquares;
+        nsquares++;
+        draw();
+    }
+
+    function newbtn() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        squares = [];
+        curvePointsY = [];
+        curvePointsX = [];
+        loops = -1;
+        segCheck = 3;
+        nsquares = 0;
+        toggleCount = 0;
+    }
+
+    function toggle() {
+        if (toggleCount === 0) {
+            toggleCount++;
+        } else {
+            toggleCount = 0;
+        }
+        draw();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.beginPath();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "black";
+
+        if (toggleCount != 1) {
+            //Tegne firkanter for somt punkt
+            for (let i = 0; i < nsquares; i++) {
+                ctx.strokeRect(squares[i].x - SQUARELENGTH / 2, squares[i].y - SQUARELENGTH
+                    / 2, SQUARELENGTH, SQUARELENGTH);
+            }
+            //Tegne streker
+            for (let i = 0; i < nsquares; i++) {
+                if (nsquares === 1) {
+                    ctx.moveTo(squares[0].x - SQUARELENGTH / 2, squares[0].y - SQUARELENGTH / 2);
+                } else {
+                    ctx.lineTo(squares[i].x, squares[i].y);
+                }
+            }
+        }
+        ctx.stroke();
+        drawBeziere();
+    }
+
+    function drawBeziere() {
+        if (nsquares-segCheck===1){
+            segments = true;
+            segCheck += 3;
+            loops+=n;
+        }
+        if (nsquares > 3 && segments) {
+            if(curvePointsX.length>n){
+                curvePointsX.length = curvePointsX.length-n;
+                curvePointsY.length = curvePointsY.length-n;
+            }
+            for (let seg = 0; seg < 2; seg++) {
+                for (let j = 0; j < n; j++) {
+                    let t = j * delta;
+                        curvePointsX.push(
+                            Math.round(squares[current - 3].x * (1.0 - t) * (1.0 - t) * (1.0 - t)
+                                + squares[current - 2].x * 3.0 * t * (1.0 - t) * (1.0 - t)
+                                + squares[current - 1].x * 3.0 * t * t * (1.0 - t)
+                                + squares[current].x * t * t * t));
+                        curvePointsY.push(
+                            Math.round(squares[current - 3].y * (1.0 - t) * (1.0 - t) * (1.0 - t)
+                                + squares[current - 2].y * 3.0 * t * (1.0 - t) * (1.0 - t)
+                                + squares[current - 1].y * 3.0 * t * t * (1.0 - t)
+                                + squares[current].y * t * t * t));
+                }
+            }
+            segments = false;
+        }
+
+        if (curvePointsY.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(curvePointsX[0], curvePointsY[0]);
+            for (let j = 0; j < loops; j++) {
+                ctx.lineTo(curvePointsX[j], curvePointsY[j]);
+            }
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
+    }
+
+</script>
+</html>

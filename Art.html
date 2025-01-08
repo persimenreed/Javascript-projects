@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oppgave 2</title>
+</head>
+<body>
+<form onchange="dropdownValue()">
+    <label for="corners">Antall hjørner</label>
+    <select id="corners">
+        <option>72</option>
+        <option>128</option>
+        <option>256</option>
+        <option>512</option>
+        <option>1024</option>
+    </select>
+    <label for="kx">kx</label>
+    <select id="kx">
+        <option>2</option>
+        <option>3</option>
+        <option>4</option>
+        <option>5</option>
+    </select>
+</form>
+<form onchange="loadPreset()">
+    <label for="preset">Preset</label>
+    <select id="preset">
+        <option></option>
+        <option>1</option>
+        <option>2</option>
+        <option>3</option>
+        <option>4</option>
+        <option>5</option>
+        <option>6</option>
+    </select>
+</form>
+
+<canvas id="myCanvas" width="800" height="800" style="background-color:yellow; border:1px solid;">
+</canvas>
+
+<script type="text/javascript">
+    let c = document.getElementById("myCanvas");
+    let ctx = c.getContext("2d");
+
+    let newX=[];
+    let newY=[];
+    let a=b=350;
+    let center = 400;
+    let i=0;
+    let v=0;
+    let vinkelsteg;
+
+    let corners = document.getElementById("corners");
+    let kxValue = document.getElementById("kx");
+    let preset = document.getElementById("preset");
+    let antall = 72;
+    let kx =2;
+
+    drawPolygon();
+    function drawPolygon() {
+        ctx.clearRect(0, 0, c.width, c.height);
+        vinkelsteg = 2*Math.PI/antall;
+        ctx.beginPath();
+        do {
+            let x = a * Math.cos(v);
+            let y = b * Math.sin(v);
+            newX.push(x);
+            newY.push(y);
+            ctx.lineTo(newX[i] + center, newY[i] + center);
+            v += vinkelsteg;
+            i++;
+        } while (v < 2 * Math.PI);
+        ctx.closePath();
+        ctx.stroke();
+        drawLines();
+    }
+
+    function drawLines(){
+        let y=0;
+        ctx.beginPath();
+        for(let i=0; i<antall; i++){
+            ctx.lineTo(newX[i]+center,newY[i]+center);
+                for(let f=0; f<=antall; f++){
+                    if(y<=antall){
+                        ctx.lineTo(newX[y]+center,newY[y]+center);
+                        y = i * kx;
+                    }else{
+                        y = y % antall;
+                    }
+                }
+        }
+        ctx.stroke();
+    }
+
+    function dropdownValue() {
+        kx = kxValue.value;
+        antall = corners.value;
+        drawPolygon();
+        v = 0;
+        newX = [];
+        newY = [];
+    }
+
+    function loadPreset(){
+        if (preset.value == 1){
+            kx=976;
+            antall=800;
+        }else if (preset.value == 2){
+            kx=56;
+            antall=500;
+        }else if (preset.value == 3){
+            kx=663;
+            antall=866;
+        }else if (preset.value == 4){
+            kx=252;
+            antall=500;
+        }else if (preset.value == 5){
+            kx=253;
+            antall=500;
+        }else{
+            kx=43;
+            antall=722;
+        }
+        drawPolygon();
+        v = 0;
+        newX = [];
+        newY = [];
+    }
+
+</script>
+</body>
+</html>
